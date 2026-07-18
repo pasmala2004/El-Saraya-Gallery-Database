@@ -3,7 +3,7 @@ import uuid
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, Numeric, SmallInteger, String, Text
+from sqlalchemy import CheckConstraint, ForeignKey, Numeric, SmallInteger, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -24,6 +24,17 @@ class MeasurementItem(BaseEntity):
     """
 
     __tablename__ = "measurement_items"
+    __table_args__ = (
+        CheckConstraint("quantity > 0", name="ck_measurement_items_quantity_positive"),
+        CheckConstraint(
+            "width IS NULL OR width >= 0",
+            name="ck_measurement_items_width_nonneg",
+        ),
+        CheckConstraint(
+            "height IS NULL OR height >= 0",
+            name="ck_measurement_items_height_nonneg",
+        ),
+    )
 
     measurement_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -41,19 +52,24 @@ class MeasurementItem(BaseEntity):
     piece_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
     width: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
     height: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
-    quantity: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=1)
+    quantity: Mapped[int] = mapped_column(
+        SmallInteger,
+        nullable=False,
+        default=1,
+        server_default="1",
+    )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    # Relationships
+    # Relationships — lazy="select" by default; use selectinload/joinedload in queries
     measurement: Mapped["Measurement"] = relationship(
         "Measurement",
         back_populates="items",
-        lazy="joined",
+        lazy="select",
     )
     quotation_item: Mapped["QuotationItem"] = relationship(
         "QuotationItem",
         back_populates="measurement_items",
-        lazy="joined",
+        lazy="select",
     )
 
     def __repr__(self) -> str:

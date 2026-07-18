@@ -85,15 +85,8 @@ backend/
 │   ├── utils/                  # Utility functions
 │   └── main.py                 # FastAPI application entry
 ├── docs/                       # Documentation
-│   ├── CHANGELOG.md            # Business improvements log
-│   ├── MIGRATION_GUIDE.md      # Complete migration docs
-│   ├── MIGRATION_QUICKSTART.md # Quick reference
-│   ├── MIGRATION_SUMMARY.md    # Migration overview
-│   ├── MIGRATION_VERIFICATION.md # Verification checklist
-│   ├── MODELS_QUICK_REFERENCE.md # Model field reference
-│   ├── models_summary.md       # Detailed model docs
-│   ├── schema_plan.md          # Database schema plan
-│   └── verify_migration.sql    # SQL verification script
+│   ├── MIGRATION_GUIDE.md      # Alembic / schema migrations
+│   └── SEEDING_GUIDE.md        # Database seeding
 ├── tests/                      # Test suite
 │   └── test_health.py
 ├── .dockerignore               # Docker ignore patterns
@@ -195,9 +188,6 @@ alembic upgrade head
 # Verify migration
 docker compose exec db psql -U erp_user -d erp_db -c "\dt"
 # Should show 11 tables
-
-# Optional: Run full verification
-docker compose exec -T db psql -U erp_user -d erp_db < docs/verify_migration.sql
 ```
 
 ### 4. Start Application
@@ -387,16 +377,9 @@ See [Seeding Guide](docs/SEEDING_GUIDE.md) for detailed documentation.
 
 ## 📖 Documentation
 
-Comprehensive documentation in `docs/`:
-
-- **`MIGRATION_GUIDE.md`** — Complete migration documentation (3,400+ words)
-- **`MIGRATION_QUICKSTART.md`** — One-page quick reference
-- **`SEEDING_GUIDE.md`** — Complete seeding system documentation
-- **`SEEDING_QUICKSTART.md`** — Quick reference for database seeding
-- **`models_summary.md`** — Detailed model documentation with all fields
-- **`MODELS_QUICK_REFERENCE.md`** — Quick lookup for common queries
-- **`CHANGELOG.md`** — Business improvements and changes
-- **`verify_migration.sql`** — PostgreSQL verification script
+- **[`docs/MIGRATION_GUIDE.md`](docs/MIGRATION_GUIDE.md)** — Alembic migrations
+- **[`docs/SEEDING_GUIDE.md`](docs/SEEDING_GUIDE.md)** — Database seeding
+- **ORM models** — `app/models/` (source of truth for the schema)
 
 ---
 

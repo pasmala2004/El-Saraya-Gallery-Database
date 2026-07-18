@@ -3,7 +3,7 @@ import uuid
 from datetime import date
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Date, ForeignKey, Text
+from sqlalchemy import Date, ForeignKey, Index, Text
 from sqlalchemy.dialects.postgresql import ENUM, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -26,6 +26,9 @@ class Job(BaseEntity):
     """
 
     __tablename__ = "jobs"
+    __table_args__ = (
+        Index("ix_jobs_status", "status"),
+    )
 
     quotation_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -35,9 +38,11 @@ class Job(BaseEntity):
         index=True,
     )
     status: Mapped[JobStatus] = mapped_column(
-        ENUM(JobStatus, name="job_status", create_type=True),
+        # Types are created by Alembic migrations — do not auto-create from ORM
+        ENUM(JobStatus, name="job_status", create_type=False),
         nullable=False,
         default=JobStatus.PENDING,
+        server_default="pending",
     )
     measurement_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     production_start: Mapped[date | None] = mapped_column(Date, nullable=True)
@@ -47,23 +52,23 @@ class Job(BaseEntity):
     completion_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    # Relationships
+    # Relationships — lazy="select" by default; use selectinload/joinedload in queries
     quotation: Mapped["Quotation"] = relationship(
         "Quotation",
         back_populates="job",
-        lazy="joined",
+        lazy="select",
     )
     measurements: Mapped[list["Measurement"]] = relationship(
         "Measurement",
         back_populates="job",
         cascade="all, delete-orphan",
-        lazy="selectin",
+        lazy="select",
     )
     payments: Mapped[list["Payment"]] = relationship(
         "Payment",
         back_populates="job",
         cascade="all, delete-orphan",
-        lazy="selectin",
+        lazy="select",
     )
     activity_logs: Mapped[list["ActivityLog"]] = relationship(
         "ActivityLog",

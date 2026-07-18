@@ -1,7 +1,7 @@
 """Customer model."""
 from typing import TYPE_CHECKING
 
-from sqlalchemy import String, Text
+from sqlalchemy import Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import BaseEntity
@@ -18,6 +18,10 @@ class Customer(BaseEntity):
     """
 
     __tablename__ = "customers"
+    __table_args__ = (
+        Index("ix_customers_phone_number", "phone_number"),
+        Index("ix_customers_full_name", "full_name"),
+    )
 
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
     phone_number: Mapped[str] = mapped_column(String(50), nullable=False)
@@ -27,12 +31,12 @@ class Customer(BaseEntity):
     location_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    # Relationships
+    # Relationships — lazy="select" by default; use selectinload/joinedload in queries
     quotations: Mapped[list["Quotation"]] = relationship(
         "Quotation",
         back_populates="customer",
         cascade="all, delete-orphan",
-        lazy="selectin",
+        lazy="select",
     )
 
     def __repr__(self) -> str:

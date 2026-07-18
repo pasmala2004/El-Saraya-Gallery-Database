@@ -6,6 +6,12 @@ Provides:
 - `AsyncSessionLocal`: a session factory for creating new sessions.
 - `get_db`: a FastAPI dependency that yields a session per request and
   guarantees it is closed afterwards.
+
+Commit policy
+-------------
+`get_db` does **not** auto-commit.  Services/repositories must call
+`await session.commit()` explicitly (or rely on a Unit-of-Work helper).
+This keeps write boundaries intentional and testable.
 """
 from collections.abc import AsyncGenerator
 
@@ -17,7 +23,6 @@ engine = create_async_engine(
     settings.DATABASE_URL,
     echo=settings.APP_DEBUG,
     pool_pre_ping=True,
-    future=True,
 )
 
 AsyncSessionLocal = async_sessionmaker(
@@ -33,5 +38,6 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
     async with AsyncSessionLocal() as session:
         try:
             yield session
-        finally:
-            await session.close()
+        except Exception:
+            await session.rollback()
+            raise

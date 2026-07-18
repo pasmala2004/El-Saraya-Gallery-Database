@@ -21,12 +21,12 @@ class ProductCategory(BaseEntity):
 
     name: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
 
-    # Relationships
+    # Relationships — lazy="select" by default; use selectinload/joinedload in queries
     products: Mapped[list["Product"]] = relationship(
         "Product",
         back_populates="category",
         cascade="all, delete-orphan",
-        lazy="selectin",
+        lazy="select",
     )
 
     def __repr__(self) -> str:

@@ -4,7 +4,15 @@ from datetime import date
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Date, ForeignKey, Numeric, String, Text
+from sqlalchemy import (
+    CheckConstraint,
+    Date,
+    ForeignKey,
+    Index,
+    Numeric,
+    String,
+    Text,
+)
 from sqlalchemy.dialects.postgresql import ENUM, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -26,6 +34,13 @@ class Quotation(BaseEntity):
     """
 
     __tablename__ = "quotations"
+    __table_args__ = (
+        CheckConstraint("total_price >= 0", name="ck_quotations_total_price_nonneg"),
+        CheckConstraint("discount >= 0", name="ck_quotations_discount_nonneg"),
+        CheckConstraint("final_price >= 0", name="ck_quotations_final_price_nonneg"),
+        Index("ix_quotations_status", "status"),
+        Index("ix_quotations_quotation_date", "quotation_date"),
+    )
 
     quotation_number: Mapped[str] = mapped_column(
         String(50),
@@ -41,38 +56,43 @@ class Quotation(BaseEntity):
     )
     quotation_date: Mapped[date] = mapped_column(Date, nullable=False)
     status: Mapped[QuotationStatus] = mapped_column(
-        ENUM(QuotationStatus, name="quotation_status", create_type=True),
+        # Types are created by Alembic migrations — do not auto-create from ORM
+        ENUM(QuotationStatus, name="quotation_status", create_type=False),
         nullable=False,
         default=QuotationStatus.DRAFT,
+        server_default="draft",
     )
     total_price: Mapped[Decimal] = mapped_column(
         Numeric(12, 2),
         nullable=False,
         default=Decimal("0.00"),
+        server_default="0.00",
     )
     discount: Mapped[Decimal] = mapped_column(
         Numeric(12, 2),
         nullable=False,
         default=Decimal("0.00"),
+        server_default="0.00",
     )
     final_price: Mapped[Decimal] = mapped_column(
         Numeric(12, 2),
         nullable=False,
         default=Decimal("0.00"),
+        server_default="0.00",
     )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    # Relationships
+    # Relationships — lazy="select" by default; use selectinload/joinedload in queries
     customer: Mapped["Customer"] = relationship(
         "Customer",
         back_populates="quotations",
-        lazy="joined",
+        lazy="select",
     )
     items: Mapped[list["QuotationItem"]] = relationship(
         "QuotationItem",
         back_populates="quotation",
         cascade="all, delete-orphan",
-        lazy="selectin",
+        lazy="select",
     )
     job: Mapped["Job | None"] = relationship(
         "Job",

@@ -308,7 +308,6 @@ The migration was cross-referenced against:
 - All 11 model files in `app/models/`
 - All enum definitions in `app/enums/`
 - The `BaseEntity` class in `app/db/base.py`
-- Documentation in `docs/models_summary.md`
 
 ### What Autogenerate Would Have Detected
 

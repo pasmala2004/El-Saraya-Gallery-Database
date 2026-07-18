@@ -1,7 +1,11 @@
 """
 Application-wide constants.
 
-Add domain-agnostic, hard-coded values here (e.g. pagination defaults,
-time limits, magic strings that appear in multiple modules).
+Domain-agnostic values shared across modules (pagination defaults, etc.).
 """
-# Constants will be defined here as the application grows.
+
+# List-query defaults (used by app.core.query.Pagination / Sorting)
+DEFAULT_PAGE_LIMIT: int = 50
+MAX_PAGE_LIMIT: int = 100
+DEFAULT_SORT_BY: str = "created_at"
+DEFAULT_SORT_ORDER: str = "desc"

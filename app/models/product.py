@@ -2,7 +2,7 @@
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, ForeignKey, String
+from sqlalchemy import Boolean, ForeignKey, String, UniqueConstraint, true
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -24,6 +24,9 @@ class Product(BaseEntity):
     """
 
     __tablename__ = "products"
+    __table_args__ = (
+        UniqueConstraint("category_id", "name", name="uq_products_category_id_name"),
+    )
 
     category_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -32,13 +35,18 @@ class Product(BaseEntity):
         index=True,
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    active: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default=true(),
+    )
 
-    # Relationships
+    # Relationships — lazy="select" by default; use selectinload/joinedload in queries
     category: Mapped["ProductCategory"] = relationship(
         "ProductCategory",
         back_populates="products",
-        lazy="joined",
+        lazy="select",
     )
     quotation_items: Mapped[list["QuotationItem"]] = relationship(
         "QuotationItem",
