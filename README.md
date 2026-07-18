@@ -210,7 +210,20 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 docker compose up backend
 ```
 
-### 5. Verify Installation
+### 5. Seed Database (Optional)
+
+```bash
+# Populate with realistic sample data
+python seed_database.py
+
+# Verify seeded data
+docker compose exec db psql -U erp_user -d erp_db -c "SELECT count(*) FROM customers;"
+# Expected: 10 customers
+```
+
+See [Seeding Guide](docs/SEEDING_GUIDE.md) for details.
+
+### 6. Verify Installation
 
 ```bash
 # Health check
@@ -340,6 +353,36 @@ docker compose exec db psql -U erp_user -d erp_db
 \q               # Quit
 ```
 
+### Database Seeding
+
+Populate the database with realistic sample data:
+
+```bash
+# Seed all tables with sample data
+python seed_database.py
+
+# Clear all seeded data (⚠️ destructive!)
+python seed_database.py --clear
+```
+
+**What gets seeded:**
+- 5 Product Categories
+- 40 Products (8 per category)
+- 10 Egyptian Customers
+- ~12 Quotations with multiple statuses
+- ~10 Jobs for approved quotations
+- ~30 Payments (3 per job: 70% Deposit, 20% Production, 10% Final)
+- ~10 Measurements with measurement items
+- ~50 Activity logs tracking job lifecycle
+
+**Features:**
+- ✅ Idempotent (safe to run multiple times)
+- ✅ Realistic Egyptian data (names, phone numbers, cities)
+- ✅ Complete relationships and foreign keys
+- ✅ Proper date sequences and status progressions
+
+See [Seeding Guide](docs/SEEDING_GUIDE.md) for detailed documentation.
+
 ---
 
 ## 📖 Documentation
@@ -348,6 +391,8 @@ Comprehensive documentation in `docs/`:
 
 - **`MIGRATION_GUIDE.md`** — Complete migration documentation (3,400+ words)
 - **`MIGRATION_QUICKSTART.md`** — One-page quick reference
+- **`SEEDING_GUIDE.md`** — Complete seeding system documentation
+- **`SEEDING_QUICKSTART.md`** — Quick reference for database seeding
 - **`models_summary.md`** — Detailed model documentation with all fields
 - **`MODELS_QUICK_REFERENCE.md`** — Quick lookup for common queries
 - **`CHANGELOG.md`** — Business improvements and changes
