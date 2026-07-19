@@ -129,8 +129,10 @@ class QuotationStatusUpdate(BaseModel):
     model_config = ConfigDict(
         json_schema_extra={
             "examples": [
+                {"status": "waiting_for_measurement"},
+                {"status": "measured"},
+                {"status": "under_negotiation"},
                 {"status": "sent"},
-                {"status": "draft"},
                 {"status": "approved"},
             ]
         }
@@ -138,9 +140,9 @@ class QuotationStatusUpdate(BaseModel):
 
     status: QuotationStatus = Field(
         description=(
-            "Target status. Frozen schema supports: draft, sent, approved, "
-            "rejected, cancelled. Negotiation is modeled as draft ↔ sent. "
-            "Approved / rejected / cancelled are terminal."
+            "Target status. Full lifecycle: draft → waiting_for_measurement → "
+            "measured → under_negotiation ↔ sent → approved | rejected | "
+            "cancelled. Terminal: approved, rejected, cancelled, expired."
         ),
     )
 

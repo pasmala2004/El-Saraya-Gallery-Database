@@ -132,7 +132,8 @@ async def get_quotation(
     summary="Create quotation",
     description=(
         "Create a **draft** quotation for an existing customer. "
-        "Add line items via ``POST /quotations/{id}/items`` before sending."
+        "Add line items via ``POST /quotations/{id}/items``, then advance "
+        "status through ``PATCH /quotations/{id}/status``."
     ),
     responses={
         201: {"description": "Draft quotation created."},
@@ -159,7 +160,10 @@ async def create_quotation(
     responses={
         400: {"model": ErrorResponse},
         404: {"model": ErrorResponse},
-        422: {"model": ErrorResponse, "description": "Terminal / business rule."},
+        422: {
+            "model": ErrorResponse,
+            "description": "Not editable (non-draft / terminal) or business rule.",
+        },
     },
 )
 async def update_quotation(
@@ -179,13 +183,18 @@ async def update_quotation(
     response_model=QuotationRead,
     summary="Update quotation status",
     description=(
-        "**Supported transitions (frozen enum)**\n\n"
-        "- `draft` → `sent` | `cancelled` (sent requires ≥1 item)\n"
-        "- `sent` → `draft` | `approved` | `rejected` | `cancelled` "
-        "(approved requires ≥1 item; `sent`→`draft` = renegotiation)\n"
-        "- `approved` / `rejected` / `cancelled` → *(terminal)*\n\n"
-        "Statuses waiting_for_measurement / measured / under_negotiation / expired "
-        "are **not** in the frozen database enum; negotiation is `draft`↔`sent`."
+        "**Quotation lifecycle transitions**\n\n"
+        "| From | To |\n"
+        "|------|----|\n"
+        "| `draft` | `waiting_for_measurement` (requires ≥1 item) |\n"
+        "| `waiting_for_measurement` | `measured`, `cancelled` |\n"
+        "| `measured` | `under_negotiation`, `sent` (requires ≥1 item) |\n"
+        "| `under_negotiation` | `sent` (requires ≥1 item), `cancelled` |\n"
+        "| `sent` | `under_negotiation`, `approved` (requires ≥1 item), "
+        "`rejected`, `cancelled` |\n"
+        "| `approved` / `rejected` / `cancelled` / `expired` | *(terminal)* |\n\n"
+        "Negotiation loop: `measured` ↔ `under_negotiation` ↔ `sent` "
+        "(via allowed transitions above)."
     ),
     responses={
         200: {"description": "Status updated."},

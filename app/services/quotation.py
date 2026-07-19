@@ -1,14 +1,12 @@
 """
 Quotation application service — central pre-production workflow.
 
-Frozen schema statuses (``QuotationStatus``)
---------------------------------------------
-``draft``, ``sent``, ``approved``, ``rejected``, ``cancelled``
+Status lifecycle (``QuotationStatus``)
+---------------------------------------
+``draft`` → ``waiting_for_measurement`` → ``measured`` →
+``under_negotiation`` ↔ ``sent`` → ``approved`` | ``rejected`` | ``cancelled``
 
-The richer conceptual workflow (waiting for measurement / measured /
-under negotiation / expired) is **not** in the frozen enum or database.
-Until a future migration expands ``quotation_status``, negotiation is
-modeled as ``draft`` ↔ ``sent`` before a terminal outcome.
+Terminal: ``approved``, ``rejected``, ``cancelled``, ``expired``
 """
 from __future__ import annotations
 
@@ -35,24 +33,31 @@ from app.repositories.quotation import QuotationFilters, QuotationRepository
 from app.repositories.quotation_item import QuotationItemRepository
 from app.services.base import BaseService
 
-# Terminal outcomes — no further status changes.
+# Terminal outcomes — no further status changes via PATCH /status.
 _TERMINAL_STATUSES: frozenset[QuotationStatus] = frozenset(
     {
         QuotationStatus.APPROVED,
         QuotationStatus.REJECTED,
         QuotationStatus.CANCELLED,
+        QuotationStatus.EXPIRED,
     }
 )
 
-# Allowed transitions on the frozen enum.
-# draft ↔ sent models negotiation before approval.
+# Allowed transitions for the full quotation lifecycle.
 _ALLOWED_TRANSITIONS: dict[QuotationStatus, frozenset[QuotationStatus]] = {
-    QuotationStatus.DRAFT: frozenset(
+    QuotationStatus.DRAFT: frozenset({QuotationStatus.WAITING_FOR_MEASUREMENT}),
+    QuotationStatus.WAITING_FOR_MEASUREMENT: frozenset(
+        {QuotationStatus.MEASURED, QuotationStatus.CANCELLED}
+    ),
+    QuotationStatus.MEASURED: frozenset(
+        {QuotationStatus.UNDER_NEGOTIATION, QuotationStatus.SENT}
+    ),
+    QuotationStatus.UNDER_NEGOTIATION: frozenset(
         {QuotationStatus.SENT, QuotationStatus.CANCELLED}
     ),
     QuotationStatus.SENT: frozenset(
         {
-            QuotationStatus.DRAFT,  # renegotiation / return to editing
+            QuotationStatus.UNDER_NEGOTIATION,
             QuotationStatus.APPROVED,
             QuotationStatus.REJECTED,
             QuotationStatus.CANCELLED,
@@ -61,7 +66,17 @@ _ALLOWED_TRANSITIONS: dict[QuotationStatus, frozenset[QuotationStatus]] = {
     QuotationStatus.APPROVED: frozenset(),
     QuotationStatus.REJECTED: frozenset(),
     QuotationStatus.CANCELLED: frozenset(),
+    QuotationStatus.EXPIRED: frozenset(),
 }
+
+# Transitions that require at least one line item on the quotation.
+_REQUIRES_ITEMS: frozenset[QuotationStatus] = frozenset(
+    {
+        QuotationStatus.WAITING_FOR_MEASUREMENT,
+        QuotationStatus.SENT,
+        QuotationStatus.APPROVED,
+    }
+)
 
 
 class QuotationService(BaseService[Quotation]):
@@ -318,12 +333,8 @@ class QuotationService(BaseService[Quotation]):
                 code="invalid_quotation_status_transition",
             )
 
-        # Leaving draft or approving requires at least one line item.
-        needs_items = new_status in {
-            QuotationStatus.SENT,
-            QuotationStatus.APPROVED,
-        }
-        if needs_items:
+        # Leaving draft or approving/sending requires at least one line item.
+        if new_status in _REQUIRES_ITEMS:
             count = await self._items.count_by_quotation(quotation.id)
             if count < 1:
                 raise BusinessRuleViolation(
@@ -333,11 +344,17 @@ class QuotationService(BaseService[Quotation]):
                 )
 
     def _ensure_editable(self, quotation: Quotation) -> None:
-        if quotation.status in _TERMINAL_STATUSES:
+        if quotation.status != QuotationStatus.DRAFT:
+            if quotation.status in _TERMINAL_STATUSES:
+                raise BusinessRuleViolation(
+                    f"Quotation in terminal status {quotation.status.value} "
+                    "cannot be modified",
+                    code="quotation_terminal",
+                )
             raise BusinessRuleViolation(
-                f"Quotation in terminal status {quotation.status.value} "
-                "cannot be modified",
-                code="quotation_terminal",
+                f"Quotation in status {quotation.status.value} cannot be "
+                "modified; only draft quotations are editable",
+                code="quotation_not_editable",
             )
 
     async def _allocate_quotation_number(self, requested: Any | None) -> str:
