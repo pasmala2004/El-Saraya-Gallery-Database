@@ -1,5 +1,5 @@
 import api from '../lib/api';
-import { Product, ProductCategory, PaginatedResponse } from '../types';
+import type { Product, ProductCategory, PaginatedResponse } from '../types';
 
 export const productsApi = {
   getAll: async (params?: {
@@ -9,7 +9,13 @@ export const productsApi = {
     active?: boolean;
     name?: string;
   }) => {
-    const { data } = await api.get<PaginatedResponse<Product>>('/products', { params });
+    // Backend expects 'category' not 'category_id'
+    const backendParams = params ? {
+      ...params,
+      category: params.category_id,
+      category_id: undefined,
+    } : undefined;
+    const { data } = await api.get<PaginatedResponse<Product>>('/products', { params: backendParams });
     return data;
   },
 
@@ -28,8 +34,9 @@ export const productsApi = {
     return data;
   },
 
+  // Note: Backend does not support DELETE
   delete: async (id: string) => {
-    await api.delete(`/products/${id}`);
+    throw new Error('Deleting products is not supported by the backend');
   },
 };
 
@@ -53,12 +60,13 @@ export const categoriesApi = {
     return data;
   },
 
+  // Note: Backend does not support UPDATE for categories
   update: async (id: string, category: Partial<ProductCategory>) => {
-    const { data } = await api.put<ProductCategory>(`/product-categories/${id}`, category);
-    return data;
+    throw new Error('Updating product categories is not supported by the backend');
   },
 
+  // Note: Backend does not support DELETE for categories
   delete: async (id: string) => {
-    await api.delete(`/product-categories/${id}`);
+    throw new Error('Deleting product categories is not supported by the backend');
   },
 };

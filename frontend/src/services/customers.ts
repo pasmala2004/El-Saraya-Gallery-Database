@@ -1,5 +1,5 @@
 import api from '../lib/api';
-import { Customer, PaginatedResponse } from '../types';
+import type { Customer, PaginatedResponse } from '../types';
 
 export const customersApi = {
   getAll: async (params?: {
@@ -27,7 +27,9 @@ export const customersApi = {
     return data;
   },
 
+  // Note: Backend does not support DELETE - customers are never deleted
+  // This method is kept for frontend compatibility but will fail if called
   delete: async (id: string) => {
-    await api.delete(`/customers/${id}`);
+    throw new Error('Deleting customers is not supported by the backend');
   },
 };

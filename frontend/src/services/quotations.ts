@@ -1,12 +1,12 @@
 import api from '../lib/api';
-import { Quotation, QuotationItem, QuotationStatus, PaginatedResponse } from '../types';
+import type { Quotation, QuotationItem, QuotationStatus, PaginatedResponse } from '../types';
 
 export const quotationsApi = {
   getAll: async (params?: {
     limit?: number;
     offset?: number;
     status?: QuotationStatus;
-    customer?: string;
+    customer?: string; // UUID
     date_from?: string;
     date_to?: string;
   }) => {
@@ -55,5 +55,10 @@ export const quotationsApi = {
       item
     );
     return data;
+  },
+
+  // Note: Backend does not support DELETE for quotation items
+  deleteItem: async (itemId: string) => {
+    throw new Error('Deleting quotation items is not supported by the backend');
   },
 };

@@ -1,3 +1,5 @@
+// Type definitions for Gallery ERP Frontend
+
 export interface Customer {
   id: string;
   full_name: string;
@@ -68,12 +70,14 @@ export type QuotationStatus =
 
 export interface Job {
   id: string;
-  job_number: string;
-  quotation_id?: string;
-  customer_id: string;
-  start_date?: string;
-  end_date?: string;
+  quotation_id: string;
   status: JobStatus;
+  measurement_date?: string;
+  production_start?: string;
+  production_end?: string;
+  installation_date?: string;
+  delivery_date?: string;
+  completion_date?: string;
   notes?: string;
   created_at: string;
   updated_at: string;
@@ -81,29 +85,79 @@ export interface Job {
 
 export type JobStatus =
   | 'pending'
-  | 'in_progress'
+  | 'measuring'
+  | 'in_production'
+  | 'ready_for_installation'
+  | 'installed'
   | 'completed'
   | 'cancelled';
 
-export interface Payment {
+export interface Measurement {
   id: string;
-  quotation_id?: string;
-  job_id?: string;
-  customer_id: string;
-  amount: string;
-  payment_date: string;
-  payment_method: PaymentMethod;
-  reference_number?: string;
+  job_id: string;
+  measurement_number: number;
+  visit_date?: string;
+  measured_by?: string;
   notes?: string;
   created_at: string;
   updated_at: string;
 }
 
+export interface MeasurementItem {
+  id: string;
+  measurement_id: string;
+  quotation_item_id: string;
+  room_name?: string;
+  piece_number?: string;
+  width?: string;
+  height?: string;
+  quantity: number;
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ActivityLog {
+  id: string;
+  job_id: string;
+  action: string;
+  description: string;
+  created_at: string;
+}
+
+export interface Payment {
+  id: string;
+  job_id: string;
+  payment_order: number;
+  payment_type: PaymentType;
+  payment_method: PaymentMethod;
+  percentage: string;
+  amount: string;
+  due_date?: string;
+  paid_date?: string;
+  status: PaymentStatus;
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export type PaymentType =
+  | 'deposit'
+  | 'production'
+  | 'final';
+
 export type PaymentMethod =
   | 'cash'
   | 'bank_transfer'
-  | 'check'
-  | 'credit_card';
+  | 'instapay'
+  | 'cheque'
+  | 'other';
+
+export type PaymentStatus =
+  | 'pending'
+  | 'paid'
+  | 'overdue'
+  | 'cancelled';
 
 export interface PaginatedResponse<T> {
   items: T[];
