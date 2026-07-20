@@ -7,6 +7,8 @@ import Customers from './pages/Customers';
 import Products from './pages/Products';
 import Quotations from './pages/Quotations';
 import Jobs from './pages/Jobs';
+import JobDetails from './pages/JobDetails';
+import MeasurementDetails from './pages/MeasurementDetails';
 import Payments from './pages/Payments';
 
 const queryClient = new QueryClient({
@@ -31,11 +33,13 @@ function App() {
             <Route path="/products" element={<Products />} />
             <Route path="/quotations" element={<Quotations />} />
             <Route path="/jobs" element={<Jobs />} />
+            <Route path="/jobs/:id" element={<JobDetails />} />
+            <Route path="/jobs/:jobId/measurements/:measurementId" element={<MeasurementDetails />} />
             <Route path="/payments" element={<Payments />} />
           </Routes>
         </Layout>
       </BrowserRouter>
-      <Toaster position="top-right" richColors />
+      <Toaster position="top-left" richColors dir="rtl" />
     </QueryClientProvider>
   );
 }
