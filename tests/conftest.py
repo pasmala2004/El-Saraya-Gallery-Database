@@ -13,7 +13,12 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.db.session import get_db
 from app.main import app
+from app.models.activity_log import ActivityLog
 from app.models.customer import Customer
+from app.models.job import Job
+from app.models.measurement import Measurement
+from app.models.measurement_item import MeasurementItem
+from app.models.payment import Payment
 from app.models.product import Product
 from app.models.product_category import ProductCategory
 from app.models.quotation import Quotation
@@ -30,6 +35,11 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
             Customer.__table__,
             Quotation.__table__,
             QuotationItem.__table__,
+            Job.__table__,
+            ActivityLog.__table__,
+            Measurement.__table__,
+            MeasurementItem.__table__,
+            Payment.__table__,
         ):
             await conn.run_sync(
                 lambda sync_conn, t=table: t.create(sync_conn, checkfirst=True)
