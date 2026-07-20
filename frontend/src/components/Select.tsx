@@ -1,13 +1,25 @@
-import { SelectHTMLAttributes, forwardRef } from 'react';
+import { SelectHTMLAttributes, forwardRef, ReactNode } from 'react';
 
-interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
+interface SelectProps extends Omit<SelectHTMLAttributes<HTMLSelectElement>, 'onChange'> {
   label?: string;
   error?: string;
-  options: { value: string; label: string }[];
+  options?: { value: string; label: string }[];
+  placeholder?: string;
+  onChange?: (value: string) => void;
+  children?: ReactNode;
 }
 
 const Select = forwardRef<HTMLSelectElement, SelectProps>(
-  ({ label, error, options, className = '', ...props }, ref) => {
+  ({ label, error, options, placeholder, onChange, className = '', value, children, ...props }, ref) => {
+    const handleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+      if (onChange) {
+        onChange(e.target.value);
+      }
+      if (props.onChange) {
+        props.onChange(e);
+      }
+    };
+
     return (
       <div className="w-full">
         {label && (
@@ -25,13 +37,23 @@ const Select = forwardRef<HTMLSelectElement, SelectProps>(
             ${error ? 'border-red-500' : ''}
             ${className}
           `}
+          value={value}
+          onChange={handleChange}
           {...props}
         >
-          {options.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
+          {placeholder && (
+            <option value="">{placeholder}</option>
+          )}
+          {/* Support both options prop and children */}
+          {options ? (
+            options.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))
+          ) : (
+            children
+          )}
         </select>
         {error && <p className="mt-1 text-sm text-red-600">{error}</p>}
       </div>
