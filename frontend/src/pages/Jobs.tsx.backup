@@ -1,0 +1,411 @@
+import { useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
+import { Search, Plus, RefreshCw } from 'lucide-react';
+import { useTranslation } from '../i18n/useTranslation';
+import { jobsApi } from '../services/jobs';
+import { quotationsApi } from '../services/quotations';
+import { customersApi } from '../services/customers';
+import { formatDate, formatCurrency } from '../utils/formatters';
+import Button from '../components/Button';
+import Input from '../components/Input';
+import Select from '../components/Select';
+import Modal from '../components/Modal';
+import { Table, TableHead, TableBody, TableRow, TableHeaderCell, TableCell, EmptyState } from '../components/Table';
+import LoadingSpinner from '../components/LoadingSpinner';
+import JobStatusBadge from '../components/JobStatusBadge';
+import Badge from '../components/Badge';
+import type { Job, JobStatus, Quotation, QuotationStatus } from '../types';
+
+// Unified filter type for both quotations and jobs
+type UnifiedFilterType = 
+  | 'all' 
+  | 'draft' 
+  | 'waiting_customer'
+  | 'approved' 
+  | 'active_jobs'
+  | 'completed' 
+  | 'rejected';
+
+export default function Jobs() {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<UnifiedFilterType>('all');
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [selectedQuotationId, setSelectedQuotationId] = useState('');
+  const [notes, setNotes] = useState('');
+
+  // Fetch jobs
+  const { data: jobsData, isLoading: isLoadingJobs, isError: isJobsError } = useQuery({
+    queryKey: ['jobs'],
+    queryFn: () => jobsApi.getAll({
+      limit: 100,
+      sort_by: 'created_at',
+      sort_order: 'desc',
+    }),
+  });
+
+  // Fetch all quotations
+  const { data: quotationsData, isLoading: isLoadingQuotations, isError: isQuotationsError } = useQuery({
+    queryKey: ['quotations', 'all'],
+    queryFn: () => quotationsApi.getAll({ limit: 1000 }),
+  });
+
+  // Fetch approved quotations for job creation from backend
+  const { data: availableQuotations } = useQuery({
+    queryKey: ['quotations', 'available-for-job'],
+    queryFn: () => jobsApi.getAvailableQuotationsForJob(),
+    enabled: isCreateModalOpen,
+  });
+
+  // Fetch customers for display
+  const { data: customersData } = useQuery({
+    queryKey: ['customers'],
+    queryFn: () => customersApi.getAll({ limit: 1000 }),
+  });
+
+  const jobs = jobsData?.items || [];
+  const quotations = quotationsData?.items || [];
+  const customers = customersData?.items || [];
+  const approvedQuotationsForJob = availableQuotations || [];
+
+  // Find quotations that don't have jobs yet
+  const quotationIdsWithJobs = new Set(jobs.map(job => job.quotation_id));
+  const quotationsWithoutJobs = quotations.filter(q => !quotationIdsWithJobs.has(q.id));
+
+  const handleCreateJob = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedQuotationId) return;
+
+    try {
+      await jobsApi.create({
+        quotation_id: selectedQuotationId,
+        notes: notes || undefined,
+      });
+      
+      // Invalidate all related queries
+      queryClient.invalidateQueries({ queryKey: ['jobs'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['quotations'] });
+      
+      setIsCreateModalOpen(false);
+      setSelectedQuotationId('');
+      setNotes('');
+    } catch (error) {
+      console.error('Failed to create job:', error);
+    }
+  };
+
+  const handleQuotationClick = (quotation: Quotation) => {
+    navigate(`/projects/${quotation.id}`);
+  };
+
+  const handleJobClick = (job: Job) => {
+    navigate(`/jobs/${job.id}`);
+  };
+
+  // Helper to get customer name
+  const getCustomerName = (customerId: string) => {
+    const customer = customers.find(c => c.id === customerId);
+    return customer?.full_name || '-';
+  };
+
+  // Helper to get quotation by ID
+  const getQuotation = (quotationId: string) => {
+    return quotations.find(q => q.id === quotationId);
+  };
+
+  // Get quotation status badge variant
+  const getQuotationStatusBadgeVariant = (status: QuotationStatus): 'info' | 'success' | 'warning' | 'danger' => {
+    const variants: Record<QuotationStatus, 'info' | 'success' | 'warning' | 'danger'> = {
+      draft: 'info',
+      waiting_for_measurement: 'warning',
+      measured: 'info',
+      under_negotiation: 'warning',
+      sent: 'info',
+      approved: 'success',
+      rejected: 'danger',
+      cancelled: 'danger',
+      expired: 'danger',
+    };
+    return variants[status] || 'info';
+  };
+
+  // Create unified list of items (quotations without jobs + jobs)
+  type UnifiedItem = 
+    | { type: 'quotation'; data: Quotation }
+    | { type: 'job'; data: Job; quotation: Quotation | undefined };
+
+  const unifiedItems: UnifiedItem[] = [
+    ...quotationsWithoutJobs.map(q => ({ type: 'quotation' as const, data: q })),
+    ...jobs.map(j => ({ type: 'job' as const, data: j, quotation: getQuotation(j.quotation_id) })),
+  ];
+
+  // Apply status filter
+  const filteredItems = unifiedItems.filter(item => {
+    if (statusFilter === 'all') return true;
+    
+    if (item.type === 'quotation') {
+      const q = item.data;
+      if (statusFilter === 'draft') return q.status === 'draft';
+      if (statusFilter === 'waiting_customer') return ['waiting_for_measurement', 'measured', 'under_negotiation', 'sent'].includes(q.status);
+      if (statusFilter === 'approved') return q.status === 'approved';
+      if (statusFilter === 'rejected') return q.status === 'rejected';
+      return false;
+    } else {
+      const j = item.data;
+      if (statusFilter === 'active_jobs') return !['completed', 'cancelled'].includes(j.status);
+      if (statusFilter === 'completed') return j.status === 'completed';
+      return false;
+    }
+  });
+
+  // Apply search filter
+  const searchFilteredItems = filteredItems.filter(item => {
+    if (!searchTerm) return true;
+    
+    const lowerSearch = searchTerm.toLowerCase();
+    
+    if (item.type === 'quotation') {
+      const q = item.data;
+      const customer = customers.find(c => c.id === q.customer_id);
+      return (
+        q.quotation_number.toLowerCase().includes(lowerSearch) ||
+        customer?.full_name.toLowerCase().includes(lowerSearch)
+      );
+    } else {
+      const j = item.data;
+      const quotation = item.quotation;
+      const customer = quotation ? customers.find(c => c.id === quotation.customer_id) : undefined;
+      return (
+        quotation?.quotation_number.toLowerCase().includes(lowerSearch) ||
+        customer?.full_name.toLowerCase().includes(lowerSearch)
+      );
+    }
+  });
+
+  const isLoading = isLoadingJobs || isLoadingQuotations;
+  const isError = isJobsError || isQuotationsError;
+
+  const refetch = () => {
+    queryClient.invalidateQueries({ queryKey: ['jobs'] });
+    queryClient.invalidateQueries({ queryKey: ['quotations'] });
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">{t('projects.title')}</h1>
+          <p className="mt-1 text-sm text-gray-600">{t('projects.subtitle')}</p>
+        </div>
+        <Button
+          onClick={() => setIsCreateModalOpen(true)}
+          className="flex items-center gap-2"
+        >
+          <Plus className="w-4 h-4" />
+          {t('projects.addProject')}
+        </Button>
+      </div>
+
+      {/* Filters */}
+      <div className="bg-white rounded-lg shadow p-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              {t('common.search')}
+            </label>
+            <div className="relative">
+              <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+              <Input
+                type="text"
+                placeholder={t('projects.searchProjects')}
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pr-10"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              {t('projects.filterByStatus')}
+            </label>
+            <Select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as UnifiedFilterType)}
+            >
+              <option value="all">{t('projects.allItems')}</option>
+              <option value="draft">{t('projects.filter.draftQuotations')}</option>
+              <option value="waiting_customer">{t('projects.filter.waitingCustomer')}</option>
+              <option value="approved">{t('projects.filter.approved')}</option>
+              <option value="active_jobs">{t('projects.filter.activeJobs')}</option>
+              <option value="completed">{t('projects.filter.completed')}</option>
+              <option value="rejected">{t('projects.filter.rejected')}</option>
+            </Select>
+          </div>
+
+          <div className="flex items-end">
+            <Button
+              variant="outline"
+              onClick={() => refetch()}
+              className="flex items-center gap-2 w-full"
+            >
+              <RefreshCw className="w-4 h-4" />
+              {t('common.refresh')}
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Table */}
+      <div className="bg-white rounded-lg shadow overflow-hidden">
+        {isLoading ? (
+          <div className="flex justify-center items-center h-64">
+            <LoadingSpinner />
+          </div>
+        ) : isError ? (
+          <div className="p-8 text-center text-red-600">
+            {t('errors.generic')}
+          </div>
+        ) : searchFilteredItems.length === 0 ? (
+          <EmptyState
+            title={t('projects.noProjectsFound')}
+            description={t('projects.noProjectsDescription')}
+          />
+        ) : (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableHeaderCell>{t('projects.type')}</TableHeaderCell>
+                  <TableHeaderCell>{t('projects.quotationNumber')}</TableHeaderCell>
+                  <TableHeaderCell>{t('projects.customer')}</TableHeaderCell>
+                  <TableHeaderCell>{t('projects.status')}</TableHeaderCell>
+                  <TableHeaderCell>{t('projects.amount')}</TableHeaderCell>
+                  <TableHeaderCell>{t('projects.date')}</TableHeaderCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {searchFilteredItems.map((item) => {
+                  if (item.type === 'quotation') {
+                    const quotation = item.data;
+                    const customer = customers.find(c => c.id === quotation.customer_id);
+                    
+                    return (
+                      <TableRow
+                        key={`quotation-${quotation.id}`}
+                        onClick={() => handleQuotationClick(quotation)}
+                        className="cursor-pointer hover:bg-gray-50"
+                      >
+                        <TableCell>
+                          <Badge variant="info" size="sm">{t('projects.quotationLabel')}</Badge>
+                        </TableCell>
+                        <TableCell className="font-medium">
+                          {quotation.quotation_number}
+                        </TableCell>
+                        <TableCell>{customer?.full_name || '-'}</TableCell>
+                        <TableCell>
+                          <Badge variant={getQuotationStatusBadgeVariant(quotation.status)} size="sm">
+                            {t(`quotationStatus.${quotation.status}`)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="font-medium">
+                          {formatCurrency(quotation.final_price)}
+                        </TableCell>
+                        <TableCell>{formatDate(quotation.quotation_date)}</TableCell>
+                      </TableRow>
+                    );
+                  } else {
+                    const job = item.data;
+                    const quotation = item.quotation;
+                    const customer = quotation ? customers.find(c => c.id === quotation.customer_id) : undefined;
+                    
+                    return (
+                      <TableRow
+                        key={`job-${job.id}`}
+                        onClick={() => handleJobClick(job)}
+                        className="cursor-pointer hover:bg-gray-50"
+                      >
+                        <TableCell>
+                          <Badge variant="success" size="sm">{t('projects.projectLabel')}</Badge>
+                        </TableCell>
+                        <TableCell className="font-medium">
+                          {quotation?.quotation_number || '-'}
+                        </TableCell>
+                        <TableCell>{customer?.full_name || '-'}</TableCell>
+                        <TableCell>
+                          <JobStatusBadge status={job.status} />
+                        </TableCell>
+                        <TableCell className="font-medium">
+                          {quotation ? formatCurrency(quotation.final_price) : '-'}
+                        </TableCell>
+                        <TableCell>{formatDate(job.created_at)}</TableCell>
+                      </TableRow>
+                    );
+                  }
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </div>
+
+      {/* Create Job Modal */}
+      <Modal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        title={t('projects.addProject')}
+      >
+        <form onSubmit={handleCreateJob} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              {t('jobs.selectQuotation')} *
+            </label>
+            <Select
+              value={selectedQuotationId}
+              onChange={(e) => setSelectedQuotationId(e.target.value)}
+              required
+            >
+              <option value="">{t('jobs.selectQuotation')}</option>
+              {approvedQuotationsForJob.map(quotation => (
+                <option key={quotation.id} value={quotation.id}>
+                  {quotation.quotation_number} - {quotation.customer_name} - {new Date(quotation.quotation_date).toLocaleDateString()}
+                </option>
+              ))}
+            </Select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              {t('jobs.notes')}
+            </label>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={3}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsCreateModalOpen(false)}
+            >
+              {t('common.cancel')}
+            </Button>
+            <Button type="submit">
+              {t('common.create')}
+            </Button>
+          </div>
+        </form>
+      </Modal>
+    </div>
+  );
+}

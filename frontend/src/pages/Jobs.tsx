@@ -1,313 +1,287 @@
-import { useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
-import { Search, Plus, RefreshCw } from 'lucide-react';
+import { useState, useMemo, useCallback } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { Search, Plus, X, Filter, SortDesc } from 'lucide-react';
 import { useTranslation } from '../i18n/useTranslation';
-import { jobsApi } from '../services/jobs';
-import { quotationsApi } from '../services/quotations';
-import { customersApi } from '../services/customers';
-import { formatDate } from '../utils/formatters';
+import { useProjectsData } from '../hooks/useProjectsData';
+import { useAllJobPayments } from '../hooks/useAllJobPayments';
 import Button from '../components/Button';
 import Input from '../components/Input';
 import Select from '../components/Select';
-import Modal from '../components/Modal';
-import { Table, TableHead, TableBody, TableRow, TableHeaderCell, TableCell, EmptyState } from '../components/Table';
 import LoadingSpinner from '../components/LoadingSpinner';
-import JobStatusBadge from '../components/JobStatusBadge';
-import type { Job, JobStatus } from '../types';
+import ProjectCard from '../components/projects/ProjectCard';
+import type { JobStatus } from '../types';
 
-export default function Jobs() {
+type SortOption = 'newest' | 'oldest' | 'highest_value' | 'lowest_value' | 'remaining_balance' | 'alphabetical';
+
+export default function JobsNew() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
+  const location = useLocation();
+  
+  // Get dashboard filter from navigation state
+  const dashboardFilter = location.state?.filters;
   
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('');
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [selectedQuotationId, setSelectedQuotationId] = useState('');
-  const [notes, setNotes] = useState('');
+  const [statusFilter, setStatusFilter] = useState<JobStatus | 'all'>(
+    dashboardFilter?.status || 'all'
+  );
+  const [sortBy, setSortBy] = useState<SortOption>('newest');
+  const [showFilters, setShowFilters] = useState(false);
 
-  // Fetch jobs with filters
-  const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['jobs', statusFilter],
-    queryFn: () => jobsApi.getAll({
-      status: statusFilter || undefined,
-      limit: 100,
-      sort_by: 'created_at',
-      sort_order: 'desc',
-    }),
-  });
+  // Fetch all projects data
+  const { projects, isLoading } = useProjectsData();
+  
+  // Fetch payments for all jobs
+  const jobIds = useMemo(() => projects.map(p => p.job.id), [projects]);
+  const { paymentsMap, isLoading: isLoadingPayments } = useAllJobPayments(jobIds);
 
-  // Fetch approved quotations for job creation
-  const { data: quotationsData } = useQuery({
-    queryKey: ['quotations', 'approved'],
-    queryFn: () => quotationsApi.getAll({
-      status: 'approved',
-      limit: 100,
-    }),
-    enabled: isCreateModalOpen,
-  });
+  // Enrich projects with payments
+  const enrichedProjects = useMemo(() => {
+    return projects.map(project => ({
+      ...project,
+      payments: paymentsMap.get(project.job.id) || [],
+    }));
+  }, [projects, paymentsMap]);
 
-  // Fetch customers for display
-  const { data: customersData } = useQuery({
-    queryKey: ['customers'],
-    queryFn: () => customersApi.getAll({ limit: 1000 }),
-  });
+  // Filter projects
+  const filteredProjects = useMemo(() => {
+    let filtered = enrichedProjects;
 
-  // Fetch quotations for display
-  const { data: allQuotationsData } = useQuery({
-    queryKey: ['quotations', 'all'],
-    queryFn: () => quotationsApi.getAll({ limit: 1000 }),
-  });
-
-  const handleCreateJob = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedQuotationId) return;
-
-    try {
-      await jobsApi.create({
-        quotation_id: selectedQuotationId,
-        notes: notes || undefined,
-      });
-      
-      queryClient.invalidateQueries({ queryKey: ['jobs'] });
-      setIsCreateModalOpen(false);
-      setSelectedQuotationId('');
-      setNotes('');
-    } catch (error) {
-      console.error('Failed to create job:', error);
+    // Status filter
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter(p => p.job.status === statusFilter);
     }
-  };
 
-  const handleRowClick = (job: Job) => {
-    navigate(`/jobs/${job.id}`);
-  };
+    // Search filter
+    if (searchTerm) {
+      const lowerSearch = searchTerm.toLowerCase();
+      filtered = filtered.filter(p => {
+        return (
+          p.customer.full_name.toLowerCase().includes(lowerSearch) ||
+          p.quotation.quotation_number.toLowerCase().includes(lowerSearch) ||
+          p.job.id.toLowerCase().includes(lowerSearch) ||
+          p.customer.phone_number.includes(searchTerm) ||
+          p.customer.address?.toLowerCase().includes(lowerSearch) ||
+          p.job.notes?.toLowerCase().includes(lowerSearch)
+        );
+      });
+    }
 
-  const jobs = data?.items || [];
-  const customers = customersData?.items || [];
-  const quotations = allQuotationsData?.items || [];
-  const approvedQuotations = quotationsData?.items || [];
+    return filtered;
+  }, [enrichedProjects, statusFilter, searchTerm]);
 
-  // Helper to get customer name
-  const getCustomerName = (quotationId: string) => {
-    const quotation = quotations.find(q => q.id === quotationId);
-    if (!quotation) return '-';
-    const customer = customers.find(c => c.id === quotation.customer_id);
-    return customer?.full_name || '-';
-  };
+  // Sort projects
+  const sortedProjects = useMemo(() => {
+    const sorted = [...filteredProjects];
 
-  // Helper to get quotation number
-  const getQuotationNumber = (quotationId: string) => {
-    const quotation = quotations.find(q => q.id === quotationId);
-    return quotation?.quotation_number || '-';
-  };
+    switch (sortBy) {
+      case 'newest':
+        sorted.sort((a, b) => new Date(b.job.created_at).getTime() - new Date(a.job.created_at).getTime());
+        break;
+      case 'oldest':
+        sorted.sort((a, b) => new Date(a.job.created_at).getTime() - new Date(b.job.created_at).getTime());
+        break;
+      case 'highest_value':
+        sorted.sort((a, b) => parseFloat(b.quotation.final_price) - parseFloat(a.quotation.final_price));
+        break;
+      case 'lowest_value':
+        sorted.sort((a, b) => parseFloat(a.quotation.final_price) - parseFloat(b.quotation.final_price));
+        break;
+      case 'remaining_balance':
+        sorted.sort((a, b) => {
+          const remainingA = parseFloat(a.quotation.final_price) - 
+            a.payments.filter(p => p.status === 'paid').reduce((sum, p) => sum + parseFloat(p.amount), 0);
+          const remainingB = parseFloat(b.quotation.final_price) - 
+            b.payments.filter(p => p.status === 'paid').reduce((sum, p) => sum + parseFloat(p.amount), 0);
+          return remainingB - remainingA;
+        });
+        break;
+      case 'alphabetical':
+        sorted.sort((a, b) => a.customer.full_name.localeCompare(b.customer.full_name, 'ar'));
+        break;
+    }
 
-  // Filter jobs by search term
-  const filteredJobs = jobs.filter(job => {
-    if (!searchTerm) return true;
-    const quotationNumber = getQuotationNumber(job.quotation_id);
-    const customerName = getCustomerName(job.quotation_id);
-    return (
-      quotationNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      customerName.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  });
+    return sorted;
+  }, [filteredProjects, sortBy]);
 
-  const jobStatuses: JobStatus[] = [
-    'pending',
-    'measuring',
-    'in_production',
-    'ready_for_installation',
-    'installed',
-    'completed',
-    'cancelled',
-  ];
+  const handleViewProject = useCallback((jobId: string) => {
+    navigate(`/jobs/${jobId}`);
+  }, [navigate]);
+
+  const handleClearFilters = useCallback(() => {
+    setSearchTerm('');
+    setStatusFilter('all');
+    setSortBy('newest');
+  }, []);
+
+  const handleCreateProject = useCallback(() => {
+    navigate('/quotations/new');
+  }, [navigate]);
+
+  const activeFiltersCount = (statusFilter !== 'all' ? 1 : 0) + (searchTerm ? 1 : 0);
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">{t('jobs.title')}</h1>
-          <p className="mt-1 text-sm text-gray-600">{t('jobs.subtitle')}</p>
+          <h1 className="text-2xl font-bold text-gray-900">{t('projects.title')}</h1>
+          <p className="mt-1 text-sm text-gray-600">
+            {sortedProjects.length} {t('projects.title')}
+          </p>
         </div>
         <Button
-          onClick={() => setIsCreateModalOpen(true)}
+          onClick={handleCreateProject}
           className="flex items-center gap-2"
         >
           <Plus className="w-4 h-4" />
-          {t('jobs.addJob')}
+          {t('projects.addProject')}
         </Button>
       </div>
 
-      {/* Filters */}
-      <div className="bg-white rounded-lg shadow p-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              {t('common.search')}
-            </label>
+      {/* Search and Filters Bar */}
+      <div className="bg-white rounded-lg shadow p-4 space-y-4">
+        <div className="flex flex-col lg:flex-row gap-4">
+          {/* Search */}
+          <div className="flex-1">
             <div className="relative">
               <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
               <Input
                 type="text"
-                placeholder={t('jobs.searchJobs')}
+                placeholder={t('projects.searchProjects')}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pr-10"
+                className="pr-10 w-full"
               />
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              {t('jobs.status')}
-            </label>
-            <Select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
+          {/* Quick Filters */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className={`flex items-center gap-2 px-4 py-2 border rounded-lg transition-colors ${
+                showFilters
+                  ? 'bg-blue-50 border-blue-300 text-blue-700'
+                  : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+              }`}
             >
-              <option value="">{t('jobs.allStatuses')}</option>
-              {jobStatuses.map(status => (
-                <option key={status} value={status}>
-                  {t(`jobStatus.${status}`)}
-                </option>
-              ))}
-            </Select>
-          </div>
+              <Filter className="w-4 h-4" />
+              {t('common.filter')}
+              {activeFiltersCount > 0 && (
+                <span className="bg-blue-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                  {activeFiltersCount}
+                </span>
+              )}
+            </button>
 
-          <div className="flex items-end">
-            <Button
-              variant="outline"
-              onClick={() => refetch()}
-              className="flex items-center gap-2 w-full"
-            >
-              <RefreshCw className="w-4 h-4" />
-              {t('common.refresh')}
-            </Button>
+            {activeFiltersCount > 0 && (
+              <button
+                onClick={handleClearFilters}
+                className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                <X className="w-4 h-4" />
+                {t('projects.clearFilters')}
+              </button>
+            )}
           </div>
         </div>
-      </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        {isLoading ? (
-          <div className="flex justify-center items-center h-64">
-            <LoadingSpinner />
-          </div>
-        ) : isError ? (
-          <div className="p-8 text-center text-red-600">
-            {t('errors.generic')}
-          </div>
-        ) : filteredJobs.length === 0 ? (
-          <EmptyState
-            title={t('jobs.noJobsFound')}
-            description={t('jobs.addJob')}
-          />
-        ) : (
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableHeaderCell>{t('jobs.quotationNumber')}</TableHeaderCell>
-                  <TableHeaderCell>{t('jobs.customer')}</TableHeaderCell>
-                  <TableHeaderCell>{t('jobs.status')}</TableHeaderCell>
-                  <TableHeaderCell>{t('jobs.measurementDate')}</TableHeaderCell>
-                  <TableHeaderCell>{t('jobs.productionStart')}</TableHeaderCell>
-                  <TableHeaderCell>{t('jobs.installationDate')}</TableHeaderCell>
-                  <TableHeaderCell>{t('jobs.completionDate')}</TableHeaderCell>
-                  <TableHeaderCell>{t('common.createdAt')}</TableHeaderCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {filteredJobs.map((job) => (
-                  <TableRow
-                    key={job.id}
-                    onClick={() => handleRowClick(job)}
-                    className="cursor-pointer hover:bg-gray-50"
-                  >
-                    <TableCell className="font-medium">
-                      {getQuotationNumber(job.quotation_id)}
-                    </TableCell>
-                    <TableCell>{getCustomerName(job.quotation_id)}</TableCell>
-                    <TableCell>
-                      <JobStatusBadge status={job.status} />
-                    </TableCell>
-                    <TableCell>
-                      {job.measurement_date ? formatDate(job.measurement_date) : '-'}
-                    </TableCell>
-                    <TableCell>
-                      {job.production_start ? formatDate(job.production_start) : '-'}
-                    </TableCell>
-                    <TableCell>
-                      {job.installation_date ? formatDate(job.installation_date) : '-'}
-                    </TableCell>
-                    <TableCell>
-                      {job.completion_date ? formatDate(job.completion_date) : '-'}
-                    </TableCell>
-                    <TableCell>{formatDate(job.created_at)}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+        {/* Extended Filters */}
+        {showFilters && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-gray-200">
+            {/* Status Filter */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {t('projects.status')}
+              </label>
+              <Select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter((e.target as HTMLSelectElement).value as JobStatus | 'all')}
+              >
+                <option value="all">{t('projects.allStatuses')}</option>
+                <option value="pending">{t('jobStatus.pending')}</option>
+                <option value="measuring">{t('jobStatus.measuring')}</option>
+                <option value="in_production">{t('jobStatus.in_production')}</option>
+                <option value="ready_for_installation">{t('jobStatus.ready_for_installation')}</option>
+                <option value="installed">{t('jobStatus.installed')}</option>
+                <option value="completed">{t('jobStatus.completed')}</option>
+                <option value="cancelled">{t('jobStatus.cancelled')}</option>
+              </Select>
+            </div>
+
+            {/* Sort By */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                <SortDesc className="w-4 h-4 inline mr-1" />
+                {t('projects.sortBy')}
+              </label>
+              <Select
+                value={sortBy}
+                onChange={(e) => setSortBy((e.target as HTMLSelectElement).value as SortOption)}
+              >
+                <option value="newest">{t('projects.sort.newest')}</option>
+                <option value="oldest">{t('projects.sort.oldest')}</option>
+                <option value="highest_value">{t('projects.sort.highestValue')}</option>
+                <option value="lowest_value">{t('projects.sort.lowestValue')}</option>
+                <option value="remaining_balance">{t('projects.sort.remainingBalance')}</option>
+                <option value="alphabetical">{t('projects.sort.alphabetical')}</option>
+              </Select>
+            </div>
+
+            {/* Placeholder for future filters */}
+            <div className="opacity-50">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {t('projects.priority')}
+              </label>
+              <Select disabled>
+                <option>{t('common.all')}</option>
+              </Select>
+            </div>
           </div>
         )}
       </div>
 
-      {/* Create Job Modal */}
-      <Modal
-        isOpen={isCreateModalOpen}
-        onClose={() => setIsCreateModalOpen(false)}
-        title={t('jobs.addJob')}
-      >
-        <form onSubmit={handleCreateJob} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              {t('jobs.selectQuotation')} *
-            </label>
-            <Select
-              value={selectedQuotationId}
-              onChange={(e) => setSelectedQuotationId(e.target.value)}
-              required
-            >
-              <option value="">{t('jobs.selectQuotation')}</option>
-              {approvedQuotations.map(quotation => {
-                const customer = customers.find(c => c.id === quotation.customer_id);
-                return (
-                  <option key={quotation.id} value={quotation.id}>
-                    {quotation.quotation_number} - {customer?.full_name || 'Unknown'}
-                  </option>
-                );
-              })}
-            </Select>
+      {/* Projects Grid */}
+      <div>
+        {isLoading || isLoadingPayments ? (
+          <div className="flex justify-center items-center h-64">
+            <LoadingSpinner />
           </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              {t('jobs.notes')}
-            </label>
-            <textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-            />
+        ) : sortedProjects.length === 0 ? (
+          <div className="bg-white rounded-lg shadow p-12 text-center">
+            <div className="text-gray-400 mb-4">
+              <Search className="w-16 h-16 mx-auto" />
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              {t('projects.noProjectsFound')}
+            </h3>
+            <p className="text-gray-600 mb-6">
+              {searchTerm || statusFilter !== 'all'
+                ? t('projects.tryAdjustingFilters')
+                : t('projects.noProjectsDescription')}
+            </p>
+            {(searchTerm || statusFilter !== 'all') && (
+              <Button variant="outline" onClick={handleClearFilters}>
+                {t('projects.clearFilters')}
+              </Button>
+            )}
           </div>
-
-          <div className="flex justify-end gap-2 pt-4">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setIsCreateModalOpen(false)}
-            >
-              {t('common.cancel')}
-            </Button>
-            <Button type="submit">
-              {t('common.create')}
-            </Button>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {sortedProjects.map((project) => (
+              <ProjectCard
+                key={project.job.id}
+                job={project.job}
+                quotation={project.quotation}
+                customer={project.customer}
+                payments={project.payments}
+                onView={handleViewProject}
+              />
+            ))}
           </div>
-        </form>
-      </Modal>
+        )}
+      </div>
     </div>
   );
 }
