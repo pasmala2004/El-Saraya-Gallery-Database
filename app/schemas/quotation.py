@@ -4,10 +4,14 @@ from __future__ import annotations
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.enums.quotation import QuotationStatus
+
+if TYPE_CHECKING:
+    from app.schemas.job import JobRead
 
 
 class QuotationItemCreate(BaseModel):
@@ -178,3 +182,20 @@ class QuotationListResponse(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class QuotationWithJobResponse(BaseModel):
+    """
+    Response when quotation status update creates a job.
+    
+    When a quotation is approved, the system automatically creates
+    a job and returns both the quotation and the newly created job.
+    """
+
+    quotation: QuotationRead
+    job: "JobRead | None" = Field(
+        default=None,
+        description="Job created when quotation was approved (null for other status changes)",
+    )
+
+    model_config = ConfigDict(from_attributes=True)

@@ -51,4 +51,16 @@ export const jobsApi = {
     const { data } = await api.get<PaginatedResponse<Job>>(`/customers/${customerId}/jobs`, { params });
     return data;
   },
+
+  getAvailableQuotationsForJob: async () => {
+    const { data } = await api.get<Array<{
+      id: string;
+      quotation_number: string;
+      quotation_date: string;
+      customer_id: string;
+      customer_name: string;
+      final_price: string;
+    }>>('/quotations/available-for-job');
+    return data;
+  },
 };

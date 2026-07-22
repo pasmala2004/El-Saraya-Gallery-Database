@@ -64,6 +64,15 @@ class JobRepository(GenericRepository[Job]):
         )
         return result.scalar_one_or_none()
 
+    async def get_by_quotation_id(self, quotation_id: uuid.UUID) -> Job | None:
+        """
+        Check if job already exists for quotation.
+        
+        Alias for get_by_quotation() to match service layer naming.
+        Used to prevent duplicate job creation when approving quotations.
+        """
+        return await self.get_by_quotation(quotation_id)
+
     async def search(
         self,
         *,

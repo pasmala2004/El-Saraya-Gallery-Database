@@ -7,27 +7,36 @@ Status lifecycle (``QuotationStatus``)
 ``under_negotiation`` ↔ ``sent`` → ``approved`` | ``rejected`` | ``cancelled``
 
 Terminal: ``approved``, ``rejected``, ``cancelled``, ``expired``
+
+When a quotation transitions to ``approved``, a Job is automatically created
+in the same transaction to ensure data consistency.
 """
 from __future__ import annotations
 
 import uuid
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import (
     BusinessRuleViolation,
+    DatabaseException,
     DuplicateEntityError,
     EntityNotFoundError,
     ValidationError,
 )
 from app.core.query import Pagination, Sorting
+from app.enums.job import JobStatus
 from app.enums.quotation import QuotationStatus
+from app.models.activity_log import ActivityLog
+from app.models.job import Job
 from app.models.quotation import Quotation
 from app.models.quotation_item import QuotationItem
 from app.repositories.customer import CustomerRepository
+from app.repositories.job import JobRepository
 from app.repositories.product import ProductRepository
 from app.repositories.quotation import QuotationFilters, QuotationRepository
 from app.repositories.quotation_item import QuotationItemRepository
@@ -89,12 +98,14 @@ class QuotationService(BaseService[Quotation]):
         item_repository: QuotationItemRepository | None = None,
         customer_repository: CustomerRepository | None = None,
         product_repository: ProductRepository | None = None,
+        job_repository: JobRepository | None = None,
     ) -> None:
         super().__init__(session, repository, entity_name="Quotation")
         self._quotations = repository
         self._items = item_repository or QuotationItemRepository(session)
         self._customers = customer_repository or CustomerRepository(session)
         self._products = product_repository or ProductRepository(session)
+        self._jobs = job_repository or JobRepository(session)
 
     # ------------------------------------------------------------------
     # Reads
@@ -196,11 +207,76 @@ class QuotationService(BaseService[Quotation]):
         self,
         quotation_id: uuid.UUID,
         new_status: QuotationStatus,
-    ) -> Quotation:
+    ) -> tuple[Quotation, Job | None]:
+        """
+        Update quotation status.
+        
+        When status changes to APPROVED, automatically creates a Job
+        in the same transaction. Returns tuple of (quotation, job).
+        Job is None for non-approval status changes.
+        
+        Transaction is atomic - if job creation fails, quotation
+        status update is rolled back.
+        """
         quotation = await self.get_quotation(quotation_id)
         await self._validate_transition(quotation, new_status)
-        quotation.status = new_status
-        return await self.update(quotation, commit=True)
+        
+        try:
+            quotation.status = new_status
+            created_job: Job | None = None
+            
+            # Auto-create job when approving quotation
+            if new_status == QuotationStatus.APPROVED:
+                existing_job = await self._jobs.get_by_quotation_id(quotation_id)
+                if existing_job is None:
+                    created_job = await self._create_job_from_quotation(quotation)
+                else:
+                    created_job = existing_job
+            
+            await self.update(quotation, commit=True)
+            
+            if created_job:
+                await self._session.refresh(created_job)
+            
+            return quotation, created_job
+            
+        except SQLAlchemyError as e:
+            await self._session.rollback()
+            raise DatabaseException(
+                f"Failed to update quotation status: {str(e)}"
+            ) from e
+
+    async def _create_job_from_quotation(self, quotation: Quotation) -> Job:
+        """
+        Create job from approved quotation.
+        
+        Called within the same transaction as quotation approval.
+        Creates Job and ActivityLog entry atomically.
+        Uses flush() instead of commit() to keep transaction open.
+        """
+        job = Job(
+            id=uuid.uuid4(),
+            quotation_id=quotation.id,
+            status=JobStatus.PENDING,
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),
+        )
+        self._session.add(job)
+        await self._session.flush()  # Get ID but don't commit yet
+        
+        # Create activity log entry
+        activity = ActivityLog(
+            id=uuid.uuid4(),
+            job_id=job.id,
+            action="job_created",
+            description="Job automatically created from approved quotation",
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),
+        )
+        self._session.add(activity)
+        await self._session.flush()
+        
+        return job
 
     async def add_item(
         self,

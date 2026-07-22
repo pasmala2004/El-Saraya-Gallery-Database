@@ -13,10 +13,12 @@ from app.core.query import Pagination, Sorting
 from app.db.session import get_db
 from app.enums.quotation import QuotationStatus
 from app.repositories.customer import CustomerRepository
+from app.repositories.job import JobRepository
 from app.repositories.product import ProductRepository
 from app.repositories.quotation import QUOTATION_SORT_FIELDS, QuotationFilters, QuotationRepository
 from app.repositories.quotation_item import QuotationItemRepository
 from app.schemas.errors import ErrorResponse
+from app.schemas.job import JobRead
 from app.schemas.quotation import (
     QuotationCreate,
     QuotationDetailRead,
@@ -28,6 +30,7 @@ from app.schemas.quotation import (
     QuotationRead,
     QuotationStatusUpdate,
     QuotationUpdate,
+    QuotationWithJobResponse,
 )
 from app.services.quotation import QuotationService
 
@@ -43,6 +46,7 @@ def get_quotation_service(
         QuotationItemRepository(session),
         CustomerRepository(session),
         ProductRepository(session),
+        JobRepository(session),
     )
 
 
@@ -180,7 +184,7 @@ async def update_quotation(
 
 @router.patch(
     "/quotations/{quotation_id}/status",
-    response_model=QuotationRead,
+    response_model=QuotationWithJobResponse,
     summary="Update quotation status",
     description=(
         "**Quotation lifecycle transitions**\n\n"
@@ -194,21 +198,31 @@ async def update_quotation(
         "`rejected`, `cancelled` |\n"
         "| `approved` / `rejected` / `cancelled` / `expired` | *(terminal)* |\n\n"
         "Negotiation loop: `measured` ↔ `under_negotiation` ↔ `sent` "
-        "(via allowed transitions above)."
+        "(via allowed transitions above).\n\n"
+        "**Automatic Job Creation**: When status changes to `approved`, "
+        "a Job is automatically created and returned in the response. "
+        "The operation is atomic - if job creation fails, the quotation "
+        "status update is rolled back."
     ),
     responses={
-        200: {"description": "Status updated."},
+        200: {
+            "description": "Status updated. Job included if quotation was approved.",
+        },
         404: {"model": ErrorResponse},
         422: {"model": ErrorResponse, "description": "Invalid transition or missing items."},
+        500: {"model": ErrorResponse, "description": "Database error (transaction rolled back)."},
     },
 )
 async def update_quotation_status(
     quotation_id: uuid.UUID,
     body: QuotationStatusUpdate,
     service: Annotated[QuotationService, Depends(get_quotation_service)],
-) -> QuotationRead:
-    quotation = await service.update_status(quotation_id, body.status)
-    return QuotationRead.model_validate(quotation)
+) -> QuotationWithJobResponse:
+    quotation, job = await service.update_status(quotation_id, body.status)
+    return QuotationWithJobResponse(
+        quotation=QuotationRead.model_validate(quotation),
+        job=JobRead.model_validate(job) if job else None,
+    )
 
 
 @router.get(

@@ -1,4 +1,5 @@
-import { ReactNode, useState } from 'react';
+import { useState } from 'react';
+import type { ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -19,9 +20,8 @@ interface LayoutProps {
 const navigation = [
   { name: 'nav.dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'nav.customers', href: '/customers', icon: Users },
+  { name: 'nav.projects', href: '/jobs', icon: Briefcase },
   { name: 'nav.products', href: '/products', icon: Package },
-  { name: 'nav.quotations', href: '/quotations', icon: FileText },
-  { name: 'nav.jobs', href: '/jobs', icon: Briefcase },
   { name: 'nav.payments', href: '/payments', icon: CreditCard },
 ];
 

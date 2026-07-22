@@ -74,3 +74,15 @@ class BusinessRuleViolation(DomainError):
     def __init__(self, message: str, *, code: str | None = None) -> None:
         self.code = code
         super().__init__(message)
+
+
+class DatabaseException(DomainError):
+    """
+    Raised when a database operation fails unexpectedly.
+    
+    Used for transaction failures, integrity violations, or other
+    database-level errors that should trigger rollback.
+    """
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)

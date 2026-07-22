@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { Search, RefreshCw, DollarSign } from 'lucide-react';
+import { Search, RefreshCw, DollarSign, Plus } from 'lucide-react';
 import { useTranslation } from '../i18n/useTranslation';
 import { jobsApi } from '../services/jobs';
 import { paymentsApi } from '../services/payments';
@@ -11,6 +11,7 @@ import { formatDate, formatCurrency } from '../utils/formatters';
 import Button from '../components/Button';
 import Input from '../components/Input';
 import Select from '../components/Select';
+import Modal from '../components/Modal';
 import { Table, TableHead, TableBody, TableRow, TableHeaderCell, TableCell, EmptyState } from '../components/Table';
 import LoadingSpinner from '../components/LoadingSpinner';
 import PaymentStatusBadge from '../components/PaymentStatusBadge';
@@ -19,11 +20,20 @@ import type { Payment, PaymentStatus, PaymentType, PaymentMethod } from '../type
 export default function Payments() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [typeFilter, setTypeFilter] = useState<string>('');
   const [methodFilter, setMethodFilter] = useState<string>('');
+  const [isAddPaymentModalOpen, setIsAddPaymentModalOpen] = useState(false);
+  const [selectedJobId, setSelectedJobId] = useState('');
+  const [paymentType, setPaymentType] = useState<PaymentType>('deposit');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
+  const [percentage, setPercentage] = useState('');
+  const [amount, setAmount] = useState('');
+  const [dueDate, setDueDate] = useState('');
+  const [paymentNotes, setPaymentNotes] = useState('');
 
   // Fetch all jobs to get payments
   const { data: jobsData } = useQuery({
@@ -124,6 +134,45 @@ export default function Payments() {
   const paymentTypes: PaymentType[] = ['deposit', 'production', 'final'];
   const paymentMethods: PaymentMethod[] = ['cash', 'bank_transfer', 'instapay', 'cheque', 'other'];
 
+  const handleAddPayment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedJobId) return;
+
+    try {
+      // Get the job to determine payment order
+      const jobPayments = await paymentsApi.getJobPayments(selectedJobId, { limit: 100 });
+      const paymentOrder = jobPayments.items.length + 1;
+
+      await paymentsApi.create({
+        job_id: selectedJobId,
+        payment_order: paymentOrder,
+        payment_type: paymentType,
+        payment_method: paymentMethod,
+        percentage: parseFloat(percentage),
+        amount: parseFloat(amount),
+        due_date: dueDate || undefined,
+        notes: paymentNotes || undefined,
+      });
+
+      // Invalidate all related queries
+      queryClient.invalidateQueries({ queryKey: ['allPayments'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['jobs'] });
+
+      // Reset form and close modal
+      setIsAddPaymentModalOpen(false);
+      setSelectedJobId('');
+      setPaymentType('deposit');
+      setPaymentMethod('cash');
+      setPercentage('');
+      setAmount('');
+      setDueDate('');
+      setPaymentNotes('');
+    } catch (error) {
+      console.error('Failed to create payment:', error);
+    }
+  };
+
   // Calculate summary stats
   const totalPaid = filteredPayments
     .filter(p => p.status === 'paid')
@@ -145,6 +194,13 @@ export default function Payments() {
           <h1 className="text-2xl font-bold text-gray-900">{t('payments.title')}</h1>
           <p className="mt-1 text-sm text-gray-600">{t('payments.subtitle')}</p>
         </div>
+        <Button
+          onClick={() => setIsAddPaymentModalOpen(true)}
+          className="flex items-center gap-2"
+        >
+          <Plus className="w-4 h-4" />
+          {t('payments.addPayment')}
+        </Button>
       </div>
 
       {/* Summary Cards */}
@@ -342,6 +398,140 @@ export default function Payments() {
           </div>
         )}
       </div>
+
+      {/* Add Payment Modal */}
+      <Modal
+        isOpen={isAddPaymentModalOpen}
+        onClose={() => setIsAddPaymentModalOpen(false)}
+        title={t('payments.addPayment')}
+      >
+        <form onSubmit={handleAddPayment} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              {t('payments.projectNumber')} *
+            </label>
+            <Select
+              value={selectedJobId}
+              onChange={(e) => setSelectedJobId(e.target.value)}
+              required
+            >
+              <option value="">{t('projects.selectProject')}</option>
+              {jobs.map(job => {
+                const { quotationNumber, customerName } = getJobDetails(job.id);
+                const jobNumber = job.id.substring(0, 8).toUpperCase();
+                return (
+                  <option key={job.id} value={job.id}>
+                    PROJECT-{jobNumber} - {customerName} - {quotationNumber}
+                  </option>
+                );
+              })}
+            </Select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {t('payments.paymentType')} *
+              </label>
+              <Select
+                value={paymentType}
+                onChange={(e) => setPaymentType(e.target.value as PaymentType)}
+                required
+              >
+                {paymentTypes.map(type => (
+                  <option key={type} value={type}>
+                    {t(`paymentType.${type}`)}
+                  </option>
+                ))}
+              </Select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {t('payments.paymentMethod')} *
+              </label>
+              <Select
+                value={paymentMethod}
+                onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
+                required
+              >
+                {paymentMethods.map(method => (
+                  <option key={method} value={method}>
+                    {t(`paymentMethod.${method}`)}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {t('payments.percentage')} *
+              </label>
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                max="100"
+                value={percentage}
+                onChange={(e) => setPercentage(e.target.value)}
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {t('payments.amount')} *
+              </label>
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                required
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              {t('payments.dueDate')}
+            </label>
+            <Input
+              type="date"
+              value={dueDate}
+              onChange={(e) => setDueDate(e.target.value)}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              {t('payments.notes')}
+            </label>
+            <textarea
+              value={paymentNotes}
+              onChange={(e) => setPaymentNotes(e.target.value)}
+              rows={3}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsAddPaymentModalOpen(false)}
+            >
+              {t('common.cancel')}
+            </Button>
+            <Button type="submit">
+              {t('common.create')}
+            </Button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }

@@ -64,11 +64,21 @@ class Payment(BaseEntity):
     )
     payment_type: Mapped[PaymentType] = mapped_column(
         # Types are created by Alembic migrations — do not auto-create from ORM
-        ENUM(PaymentType, name="payment_type", create_type=False),
+        ENUM(
+            PaymentType,
+            name="payment_type",
+            create_type=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
         nullable=False,
     )
     payment_method: Mapped[PaymentMethod] = mapped_column(
-        ENUM(PaymentMethod, name="payment_method", create_type=False),
+        ENUM(
+            PaymentMethod,
+            name="payment_method",
+            create_type=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
         nullable=False,
     )
     percentage: Mapped[Decimal] = mapped_column(
@@ -86,7 +96,12 @@ class Payment(BaseEntity):
     due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     paid_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     status: Mapped[PaymentStatus] = mapped_column(
-        ENUM(PaymentStatus, name="payment_status", create_type=False),
+        ENUM(
+            PaymentStatus,
+            name="payment_status",
+            create_type=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
         nullable=False,
         default=PaymentStatus.PENDING,
         server_default="pending",

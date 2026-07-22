@@ -1,0 +1,215 @@
+{
+  "specId": "projects-module-redesign",
+  "name": "Projects Module Redesign",
+  "description": "Transform Projects into the central operational workspace of the ERP system",
+  "type": "feature",
+  "status": "requirements-approved",
+  "priority": "high",
+  "estimatedEffort": "60-80 hours",
+  "created": "2026-07-21",
+  "updated": "2026-07-21",
+  "version": "2.0",
+  "owner": "Development Team",
+  "approver": "Product Owner",
+  "tags": [
+    "projects",
+    "operational-workspace",
+    "erp-core",
+    "single-page-workspace",
+    "incremental-implementation"
+  ],
+  "implementationPhases": [
+    {
+      "phase": 0,
+      "name": "Architecture",
+      "status": "complete",
+      "description": "Requirements and design specification",
+      "estimatedHours": 8,
+      "dependencies": []
+    },
+    {
+      "phase": 1,
+      "name": "Project List Redesign",
+      "status": "pending",
+      "description": "Better cards, filters, search (no backend changes)",
+      "estimatedHours": 8,
+      "dependencies": ["phase-0"]
+    },
+    {
+      "phase": 2,
+      "name": "Project Details Header",
+      "status": "pending",
+      "description": "Complete project overview header",
+      "estimatedHours": 6,
+      "dependencies": ["phase-1"]
+    },
+    {
+      "phase": 3,
+      "name": "Workflow Section",
+      "status": "pending",
+      "description": "Visual pipeline with stage management",
+      "estimatedHours": 8,
+      "dependencies": ["phase-2"]
+    },
+    {
+      "phase": 4,
+      "name": "Timeline Section",
+      "status": "pending",
+      "description": "Automatic event recording and planned vs actual dates",
+      "estimatedHours": 6,
+      "dependencies": ["phase-3"]
+    },
+    {
+      "phase": 5,
+      "name": "Payments Integration",
+      "status": "pending",
+      "description": "Full payment management embedded in project",
+      "estimatedHours": 6,
+      "dependencies": ["phase-2"]
+    },
+    {
+      "phase": 6,
+      "name": "Measurements Integration",
+      "status": "pending",
+      "description": "Measurement cards with CRUD operations",
+      "estimatedHours": 6,
+      "dependencies": ["phase-2"]
+    },
+    {
+      "phase": 7,
+      "name": "Quotation Integration",
+      "status": "pending",
+      "description": "Full quotation view within project",
+      "estimatedHours": 4,
+      "dependencies": ["phase-2"]
+    },
+    {
+      "phase": 8,
+      "name": "Customer Section",
+      "status": "pending",
+      "description": "Customer contact and quick actions",
+      "estimatedHours": 3,
+      "dependencies": ["phase-2"]
+    },
+    {
+      "phase": 9,
+      "name": "Activity History",
+      "status": "pending",
+      "description": "Chronological activity log integration",
+      "estimatedHours": 4,
+      "dependencies": ["phase-3", "phase-4"]
+    },
+    {
+      "phase": 10,
+      "name": "Documents Section",
+      "status": "pending",
+      "description": "Future-ready placeholder",
+      "estimatedHours": 2,
+      "dependencies": ["phase-2"]
+    }
+  ],
+  "relatedSpecs": [
+    "operations-control-center-dashboard",
+    "phase-2-ux-improvements"
+  ],
+  "backendChanges": {
+    "required": true,
+    "scope": "minimal",
+    "description": "Optional aggregated endpoint for Project summary, stage completion endpoint, automatic activity logging"
+  },
+  "databaseChanges": {
+    "required": false,
+    "scope": "none",
+    "description": "Existing schema sufficient, optional planned date fields"
+  },
+  "breakingChanges": false,
+  "technicalDebt": "none",
+  "securityImpact": "none",
+  "performanceImpact": "positive",
+  "scalabilityConsiderations": [
+    "Support 100+ projects without pagination",
+    "Support 50+ payments per project",
+    "Support 20+ measurements per project",
+    "Virtual scrolling for large datasets",
+    "Lazy loading for heavy sections",
+    "Architecture supports 11 planned future features without redesign"
+  ],
+  "componentReuse": [
+    "CollapsibleSection (existing)",
+    "InlineEdit (existing)",
+    "JobStatusBadge (existing)",
+    "Badge (existing)",
+    "Button (existing)",
+    "Modal (existing)",
+    "Input (existing)",
+    "Select (existing)",
+    "formatDate (utility)",
+    "formatCurrency (utility)"
+  ],
+  "apiEndpoints": {
+    "existing": [
+      "GET /api/v1/jobs",
+      "GET /api/v1/jobs/{id}",
+      "PUT /api/v1/jobs/{id}",
+      "PATCH /api/v1/jobs/{id}/status",
+      "POST /api/v1/jobs",
+      "GET /api/v1/quotations/{id}",
+      "GET /api/v1/quotations/{id}/items",
+      "POST /api/v1/quotations/{id}/items",
+      "PUT /api/v1/quotation-items/{id}",
+      "GET /api/v1/customers/{id}",
+      "GET /api/v1/measurements?job_id={id}",
+      "POST /api/v1/measurements",
+      "PUT /api/v1/measurements/{id}",
+      "GET /api/v1/payments?job_id={id}",
+      "POST /api/v1/payments",
+      "PATCH /api/v1/payments/{id}/status"
+    ],
+    "new": [
+      "GET /api/v1/projects/{id}/summary (optional)",
+      "POST /api/v1/jobs/{id}/complete-stage (optional)",
+      "GET /api/v1/activity-logs?job_id={id} (if not exists)"
+    ]
+  },
+  "futureFeatures": [
+    "Employee assignments",
+    "Calendar integration",
+    "Notifications system",
+    "Inventory tracking",
+    "Manufacturing workflow",
+    "Installer management",
+    "AI assistant",
+    "Advanced reports",
+    "File management",
+    "Multi-location support",
+    "Custom fields"
+  ],
+  "successMetrics": {
+    "timePerProjectCheck": {
+      "current": "3 minutes",
+      "target": "30 seconds"
+    },
+    "pagesVisitedPerCheck": {
+      "current": "3-5 pages",
+      "target": "1 page"
+    },
+    "paymentVisibility": {
+      "current": "0%",
+      "target": "100%"
+    },
+    "employeeTimeInProjects": {
+      "current": "40%",
+      "target": "80%"
+    },
+    "navigationBetweenModules": {
+      "current": "High",
+      "target": "Minimal"
+    }
+  },
+  "documentation": {
+    "requirements": "requirements.md",
+    "design": "design.md (pending)",
+    "tasks": "tasks.md (pending)",
+    "refinements": "requirements-refinements.md"
+  }
+}

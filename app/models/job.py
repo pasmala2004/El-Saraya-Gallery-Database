@@ -39,7 +39,12 @@ class Job(BaseEntity):
     )
     status: Mapped[JobStatus] = mapped_column(
         # Types are created by Alembic migrations — do not auto-create from ORM
-        ENUM(JobStatus, name="job_status", create_type=False),
+        ENUM(
+            JobStatus,
+            name="job_status",
+            create_type=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
         nullable=False,
         default=JobStatus.PENDING,
         server_default="pending",

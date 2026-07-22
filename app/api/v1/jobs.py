@@ -221,6 +221,23 @@ async def get_quotation_job(
 
 
 @router.get(
+    "/quotations/available-for-job",
+    response_model=list[dict],
+    summary="Get quotations available for job creation",
+    description=(
+        "Returns approved quotations that don't have a job yet. "
+        "Each quotation includes customer details for easy selection."
+    ),
+)
+async def get_available_quotations_for_job(
+    service: Annotated[JobService, Depends(get_job_service)],
+) -> list[dict]:
+    """Get quotations that can be converted to jobs."""
+    quotations = await service.get_available_quotations_for_job()
+    return quotations
+
+
+@router.get(
     "/customers/{customer_id}/jobs",
     response_model=JobListResponse,
     summary="List jobs for a customer",

@@ -20,10 +20,13 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     # Create enum types
+    # IMPORTANT: create_type=False prevents SQLAlchemy from auto-creating
+    # the type when the enum is used in a column definition. We create it
+    # explicitly with .create() instead, giving us full control.
     quotation_status_enum = postgresql.ENUM(
         'draft', 'sent', 'approved', 'rejected', 'cancelled',
         name='quotation_status',
-        create_type=True
+        create_type=False
     )
     quotation_status_enum.create(op.get_bind(), checkfirst=True)
 
@@ -31,28 +34,28 @@ def upgrade() -> None:
         'pending', 'measuring', 'in_production', 'ready_for_installation',
         'installed', 'completed', 'cancelled',
         name='job_status',
-        create_type=True
+        create_type=False
     )
     job_status_enum.create(op.get_bind(), checkfirst=True)
 
     payment_type_enum = postgresql.ENUM(
         'deposit', 'production', 'final',
         name='payment_type',
-        create_type=True
+        create_type=False
     )
     payment_type_enum.create(op.get_bind(), checkfirst=True)
 
     payment_method_enum = postgresql.ENUM(
         'cash', 'bank_transfer', 'instapay', 'cheque', 'other',
         name='payment_method',
-        create_type=True
+        create_type=False
     )
     payment_method_enum.create(op.get_bind(), checkfirst=True)
 
     payment_status_enum = postgresql.ENUM(
         'pending', 'paid', 'overdue', 'cancelled',
         name='payment_status',
-        create_type=True
+        create_type=False
     )
     payment_status_enum.create(op.get_bind(), checkfirst=True)
 

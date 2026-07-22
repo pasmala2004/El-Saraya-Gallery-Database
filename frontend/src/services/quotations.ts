@@ -1,5 +1,5 @@
 import api from '../lib/api';
-import type { Quotation, QuotationItem, QuotationStatus, PaginatedResponse } from '../types';
+import type { Quotation, QuotationItem, QuotationStatus, QuotationWithJobResponse, PaginatedResponse } from '../types';
 
 export const quotationsApi = {
   getAll: async (params?: {
@@ -30,7 +30,7 @@ export const quotationsApi = {
   },
 
   updateStatus: async (id: string, status: QuotationStatus) => {
-    const { data } = await api.patch<Quotation>(`/quotations/${id}/status`, { status });
+    const { data } = await api.patch<QuotationWithJobResponse>(`/quotations/${id}/status`, { status });
     return data;
   },
 

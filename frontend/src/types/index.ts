@@ -159,6 +159,11 @@ export type PaymentStatus =
   | 'overdue'
   | 'cancelled';
 
+export interface QuotationWithJobResponse {
+  quotation: Quotation;
+  job: Job | null;
+}
+
 export interface PaginatedResponse<T> {
   items: T[];
   total: number;

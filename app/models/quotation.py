@@ -57,7 +57,12 @@ class Quotation(BaseEntity):
     quotation_date: Mapped[date] = mapped_column(Date, nullable=False)
     status: Mapped[QuotationStatus] = mapped_column(
         # Types are created by Alembic migrations — do not auto-create from ORM
-        ENUM(QuotationStatus, name="quotation_status", create_type=False),
+        ENUM(
+            QuotationStatus,
+            name="quotation_status",
+            create_type=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
         nullable=False,
         default=QuotationStatus.DRAFT,
         server_default="draft",

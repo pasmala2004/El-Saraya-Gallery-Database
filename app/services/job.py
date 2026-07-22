@@ -114,6 +114,43 @@ class JobService(BaseService[Job]):
             sorting=sorting,
         )
 
+    async def get_available_quotations_for_job(self) -> list[dict]:
+        """
+        Get approved quotations that don't have a job yet.
+        
+        Returns list of dicts with quotation and customer details for UI display.
+        """
+        from sqlalchemy import select
+        from sqlalchemy.orm import joinedload
+        from app.models.quotation import Quotation
+        from app.models.customer import Customer
+        
+        # Get approved quotations with customer details
+        stmt = (
+            select(Quotation)
+            .options(joinedload(Quotation.customer))
+            .where(Quotation.status == QuotationStatus.APPROVED)
+            .order_by(Quotation.quotation_date.desc())
+        )
+        result = await self._session.execute(stmt)
+        quotations = result.unique().scalars().all()
+        
+        # Filter out quotations that already have jobs
+        available = []
+        for quotation in quotations:
+            existing_job = await self._jobs.get_by_quotation(quotation.id)
+            if existing_job is None:
+                available.append({
+                    "id": str(quotation.id),
+                    "quotation_number": quotation.quotation_number,
+                    "quotation_date": quotation.quotation_date.isoformat(),
+                    "customer_id": str(quotation.customer_id),
+                    "customer_name": quotation.customer.full_name,
+                    "final_price": str(quotation.final_price),
+                })
+        
+        return available
+
     # ------------------------------------------------------------------
     # Writes
 
