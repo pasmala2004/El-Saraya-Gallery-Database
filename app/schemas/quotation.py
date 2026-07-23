@@ -199,3 +199,7 @@ class QuotationWithJobResponse(BaseModel):
     )
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# Rebuild forward references after JobRead is imported
+QuotationWithJobResponse.model_rebuild()
