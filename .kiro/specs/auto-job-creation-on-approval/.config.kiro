@@ -1,9 +1,0 @@
-{
-  "specType": "feature",
-  "workflowType": "design-first",
-  "featureName": "auto-job-creation-on-approval",
-  "generationMode": {
-    "includeHighLevelDesign": true,
-    "includeLowLevelDesign": true
-  }
-}
